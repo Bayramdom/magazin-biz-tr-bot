@@ -7,9 +7,11 @@ import re
 # =====================================================================
 # CONFIGURATION / AYARLAR
 # =====================================================================
+# GitHub Secrets'tan güvenli şekilde çekiyoruz:
 XF_API_KEY = os.environ.get("XF_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
+# Hedef Forum Ayarları
 XF_API_URL = "https://www.magazin.biz.tr/api/threads"
 NODE_ID = 26  # magazin-haberleri.26 kategorisi için ID
 HAFIZA_DOSYASI = "used_titles.txt"
@@ -26,10 +28,12 @@ def hafiza_yaz(baslik):
         f.write(baslik + "\n")
 
 def onedio_rss_cek():
-    # Onedio'nun bot engeline takılmayan resmi RSS beslemesi
     url = "https://onedio.com/support/rss.xml"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     haberler = []
+    
+    # Magazin dünyasıyla ilgili olabilecek geniş anahtar kelime ağı
+    magazin_kelimeleri = ["magazin", "ünlü", "unlu", "oyuncu", "dizi", "fenomen", "şarkıcı", "sarkici", "dedikodu", "televizyon", "sosyal medya"]
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -40,32 +44,33 @@ def onedio_rss_cek():
         items = soup.find_all("item")
         
         for item in items:
-            # Sadece magazin kategorisindeki haberleri filtrele
             category_tags = item.find_all("category")
-            is_magazin = False
-            for cat in category_tags:
-                if "magazin" in cat.get_text().lower():
-                    is_magazin = True
-                    break
+            title_tag = item.find("title")
+            desc_tag = item.find("description")
+            
+            # Kategorileri tek bir metin haline getiriyoruz
+            kategoriler_metni = " ".join([cat.get_text().lower() for cat in category_tags])
+            baslik_metni = title_tag.get_text().lower() if title_tag else ""
+            
+            # Hem kategoride hem de başlıkta magazin kelimelerini ara
+            is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
             
             if is_magazin:
-                title_tag = item.find("title")
                 link_tag = item.find("link")
-                desc_tag = item.find("description")
-                
                 if title_tag and link_tag:
                     baslik = title_tag.get_text().strip()
                     link = link_tag.get_text().strip()
                     desc = desc_tag.get_text().strip() if desc_tag else ""
                     
-                    # HTML temizliği
+                    # Açıklama kısmındaki HTML taglarını temizle
                     desc = BeautifulSoup(desc, "html.parser").get_text().strip()
                     
-                    haberler.append({
-                        "baslik": baslik,
-                        "link": link,
-                        "detay": desc
-                    })
+                    if baslik not in [h['baslik'] for h in haberler]:
+                        haberler.append({
+                            "baslik": baslik,
+                            "link": link,
+                            "detay": desc
+                        })
     except Exception as e:
         print(f"RSS Çekme Hatası: {e}")
     
@@ -162,7 +167,7 @@ def ana_fonksiyon():
         print("Gemini içerik üretiyor...")
         yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
         
-        # Sadece tek bir görsel için hızlı kontrol
+        # Görseli hızlıca çek
         canli_gorsel_url = gorsel_bul(haber_linki)
         if canli_gorsel_url:
             yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
