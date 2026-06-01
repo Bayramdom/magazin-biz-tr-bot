@@ -24,7 +24,7 @@ jobs:
 
       - name: Bağımlılıkları Yükle
         run: |
-          pip install requests beautifulsoup4 google-genai
+          pip install requests beautifulsoup4 google-genai lxml
 
       - name: Git Kimlik Ayarlarını Yap
         run: |
