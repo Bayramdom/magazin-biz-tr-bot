@@ -7,11 +7,12 @@ import re
 # =====================================================================
 # CONFIGURATION / AYARLAR
 # =====================================================================
-# GitHub Secrets'tan gelen anahtarlar
+# GitHub Secrets'tan gelen API anahtarları
 XF_API_KEY = os.environ.get("XF_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-# Super User anahtar kullandığın için konuyu açacak adminin ID'si (Varsayılan: 1)
-XF_API_USER_ID = os.environ.get("XF_API_USER_ID", "1") 
+
+# Doğrudan magazin kullanıcısının ID'si (6746) olarak sabitlendi
+XF_API_USER_ID = "6746" 
 
 XF_API_URL = "https://www.magazin.biz.tr/api/threads"
 NODE_ID = 26  
@@ -55,7 +56,7 @@ def onedio_rss_cek():
             kategoriler_metni = " ".join([cat.get_text().lower() for cat in category_tags])
             baslik_metni = title_tag.get_text().lower() if title_tag else ""
             
-            # DÜZELTİLDİ: 'elime' hatası 'kelime' olarak düzeltildi
+            # Kategoride veya başlıkta magazin kelimeleri geçiyor mu kontrolü
             is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
             
             if is_magazin:
@@ -115,7 +116,7 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     KURALLAR:
     1. İçeriği zenginleştirerek en az 2-3 paragraf uzunluğunda okuması keyifli bir metin hazırla.
     2. Forum diline uygun, okuyucuya hitap eden ama seviyeli bir üslup kullan.
-    3. Metnin sonuna "Siz bu konuda ne düşün悠orsunuz? Yorumlarda buluşalım!" gibi forumda etkileşim artıracak bir cümle ekle.
+    3. Metnin sonuna "Siz bu konuda ne düşünüyorsunuz? Yorumlarda buluşalım!" gibi forumda etkileşim artıracak bir cümle ekle.
     4. Asla markdown kod bloku (```) veya HTML tagları ekleme. Resmi BBCode formatını bozma.
     """
     
