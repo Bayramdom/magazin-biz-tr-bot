@@ -7,11 +7,10 @@ import re
 # =====================================================================
 # CONFIGURATION / AYARLAR
 # =====================================================================
-# GitHub Secrets'tan gelen API anahtarları
 XF_API_KEY = os.environ.get("XF_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# Doğrudan magazin kullanıcısının ID'si (6746) olarak sabitlendi
+# Doğrudan magazin kullanıcısının ID'si (6746) sabit
 XF_API_USER_ID = "6746" 
 
 XF_API_URL = "https://www.magazin.biz.tr/api/threads"
@@ -31,52 +30,57 @@ def hafiza_yaz(baslik):
     with open(HAFIZA_DOSYASI, "a", encoding="utf-8") as f:
         f.write(baslik.strip() + "\n")
 
-def onedio_rss_cek():
-    """Onedio RSS servisinden güncel haberleri çeker ve magazin olanları filtreler."""
-    url = "https://onedio.com/support/rss.xml"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+def onedio_magazin_sayfasi_cek():
+    """Doğrudan onedio.com/magazin sayfasını kazıyarak en güncel magazin haberlerini toplar."""
+    url = "https://onedio.com/magazin"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     haberler = []
     
-    magazin_kelimeleri = ["magazin", "ünlü", "unlu", "oyuncu", "dizi", "fenomen", "şarkıcı", "sarkici", "dedikodu", "televizyon", "sosyal medya"]
-    
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=12)
         if response.status_code != 200:
-            print(f"Onedio RSS bağlantı hatası! Durum Kodu: {response.status_code}")
+            print(f"Onedio Magazin sayfasına erişilemedi! Durum Kodu: {response.status_code}")
             return haberler
             
-        soup = BeautifulSoup(response.text, "xml")
-        items = soup.find_all("item")
+        soup = BeautifulSoup(response.text, "html.parser")
         
-        for item in items:
-            category_tags = item.find_all("category")
-            title_tag = item.find("title")
-            desc_tag = item.find("description")
-            
-            kategoriler_metni = " ".join([cat.get_text().lower() for cat in category_tags])
-            baslik_metni = title_tag.get_text().lower() if title_tag else ""
-            
-            is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
-            
-            if is_magazin:
-                link_tag = item.find("link")
-                if title_tag and link_tag:
-                    baslik = title_tag.get_text().strip()
-                    link = link_tag.get_text().strip()
-                    
-                    desc = desc_tag.get_text().strip() if desc_tag else ""
-                    if desc:
-                        desc = BeautifulSoup(desc, "html.parser").get_text().strip()
-                    
-                    if baslik not in [h['baslik'] for h in haberler]:
-                        haberler.append({
-                            "baslik": baslik,
-                            "link": link,
-                            "detay": desc
-                        })
+        # Onedio'nun modern arayüzündeki haber linklerini ve başlıklarını yakalıyoruz
+        # Sitedeki tüm makale linklerini süzer
+        links = soup.find_all("a", href=re.compile(r"/-haberleri/|-\d+$"))
+        
+        for link in links:
+            href = link.get("href", "")
+            # Tam URL haline getiriyoruz
+            if href.startswith("/"):
+                tam_url = "https://onedio.com" + href
+            elif href.startswith("http"):
+                tam_url = href
+            else:
+                continue
+                
+            # Linkin içindeki metni veya img alt etiketini başlık olarak alıyoruz
+            baslik_metni = link.get_text().strip()
+            if not baslik_metni and link.find("img"):
+                baslik_metni = link.find("img").get("alt", "").strip()
+                
+            # Kısa manşetleri veya boş olanları eliyoruz
+            if len(baslik_metni) < 15:
+                continue
+                
+            # Mükerrer eklemeyi önle
+            if tam_url not in [h['link'] for h in haberler] and baslik_metni not in [h['baslik'] for h in haberler]:
+                # Detay metni sayfa kazımada ilk etapta boş kalabilir, Gemini başlığa göre de harika üretebiliyor
+                haberler.append({
+                    "baslik": baslik_metni,
+                    "link": tam_url,
+                    "detay": baslik_metni  
+                })
+                
     except Exception as e:
-        print(f"RSS Çekme Hatası: {e}")
-    
+        print(f"Sayfa Kazıma Hatası: {e}")
+        
     return haberler
 
 def gorsel_bul(haber_url):
@@ -106,11 +110,9 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     headers = {"Content-Type": "application/json"}
     
     prompt = f"""
-    Sen popüler bir magazin sitesinin baş editörüsün. Sana verilen magazin haberini okuyarak; ilgi çekici, akıcı, merak uyandıran ve tamamen özgün (copy-paste olmayan) bir Türkçe magazin forumu konusu yaz.
+    Sen popüler bir magazin sitesinin baş editörüsün. Sana verilen güncel magazin olayını okuyarak; ilgi çekici, akıcı, merak uyandıran, dedikodu dozajı yerinde ve tamamen özgün bir Türkçe magazin forumu konusu yaz.
     
-    KAYNAK BİLGİLER:
-    Haber Başlığı: {baslik}
-    Haber Özeti: {kaynak_detay}
+    Haber Başlığı / Detayı: {baslik}
     
     KURALLAR:
     1. İçeriği zenginleştirerek en az 2-3 paragraf uzunluğunda okuması keyifli bir metin hazırla.
@@ -121,17 +123,14 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     
     data = {"contents": [{"parts": [{"text": prompt}]}]}
     
-    # 3 kere üst üste akıllı deneme döngüsü
     for deneme in range(1, 4):
         try:
             response = requests.post(url, headers=headers, json=data, timeout=20)
-            
             if response.status_code == 200:
                 res_json = response.json()
                 return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-                
             elif response.status_code == 429:
-                bekleme_suresi = deneme * 20  # İlk hatada 20, ikincide 40 saniye bekler
+                bekleme_suresi = deneme * 20  
                 print(f"Gemini Kotası Dolmuş (429). {bekleme_suresi} saniye sonra otomatik tekrar denenecek (Deneme {deneme}/3)...")
                 time.sleep(bekleme_suresi)
             else:
@@ -141,7 +140,6 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
             print(f"Gemini bağlantı hatası: {e}")
             time.sleep(5)
             
-    print("3 deneme sonrasında da Gemini kotası açılmadı. Bu tur pas geçiliyor.")
     return None
 
 def konu_ac(baslik, icerik, node_id):
@@ -160,7 +158,6 @@ def konu_ac(baslik, icerik, node_id):
     
     try:
         response = requests.post(XF_API_URL, headers=headers, data=payload, timeout=25)
-        
         if response.status_code == 200:
             print(f"Başarılı şekilde eklendi: {baslik}")
             return True
@@ -173,11 +170,11 @@ def konu_ac(baslik, icerik, node_id):
         return False
 
 def ana_fonksiyon():
-    print("Onedio Resmi RSS kanalı taranıyor...")
-    magazin_haberleri = onedio_rss_cek()
+    print("Onedio MAGAZİN sayfası canlı olarak taranıyor...")
+    magazin_haberleri = onedio_magazin_sayfasi_cek()
     
     if not magazin_haberleri:
-        print("Güncel magazin haberi bulunamadı veya RSS'e erişilemedi.")
+        print("Magazin sayfasından haber çekilemedi.")
         return
 
     hafiza = hafiza_oku()
@@ -190,13 +187,13 @@ def ana_fonksiyon():
         if baslik in hafiza:
             continue
             
-        print(f"Yeni magazin haberi işleniyor: {baslik}")
+        print(f"Yeni saf magazin haberi işleniyor: {baslik}")
         
         print("Gemini içerik üretiyor...")
         yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
         
         if not yapay_zeka_icerigi:
-            print("Gemini tüm denemelere rağmen içerik üretemedi. Forumda boş konu açılmaması için bu tur pas geçiliyor...")
+            print("Gemini içerik üretemedi. Süreç pas geçiliyor...")
             return  
         
         canli_gorsel_url = gorsel_bul(haber_linki)
