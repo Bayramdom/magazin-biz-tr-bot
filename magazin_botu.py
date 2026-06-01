@@ -56,7 +56,7 @@ def onedio_rss_cek():
             baslik_metni = title_tag.get_text().lower() if title_tag else ""
             
             # Kategoride veya başlıkta magazin kelimeleri geçiyor mu kontrolü
-            is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
+            is_magazin = any(kelime in kategoriler_metni or elime in baslik_metni for kelime in magazin_kelimeleri)
             
             if is_magazin:
                 link_tag = item.find("link")
@@ -66,7 +66,6 @@ def onedio_rss_cek():
                     
                     desc = desc_tag.get_text().strip() if desc_tag else ""
                     if desc:
-                        # Olası hatalara karşı güvenli HTML temizliği
                         desc = BeautifulSoup(desc, "html.parser").get_text().strip()
                     
                     if baslik not in [h['baslik'] for h in haberler]:
@@ -87,7 +86,6 @@ def gorsel_bul(haber_url):
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         sayfa_icerigi = requests.get(haber_url, headers=headers, timeout=10).text
         
-        # Meta etiketlerindeki görsel linkini yakalamak için esnek regex yapısı
         bulunan_gorseller = re.findall(r'<meta[^>]*?property=["\']og:image["\'][^>]*?content=["\']([^"\']+)["\']', sayfa_icerigi)
         if not bulunan_gorseller:
             bulunan_gorseller = re.findall(r'<meta[^>]*?content=["\']([^"\']+)["\'][^>]*?property=["\']og:image["\']', sayfa_icerigi)
@@ -129,37 +127,37 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
             res_json = response.json()
             return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
         else:
-            print(f"Gemini API Hatası! Kod: {response.status_code}, Cevap: {response.text}")
+            print(f"Gemini API Hatası! Kod: {response.status_code}")
             return None
     except Exception as e:
         print(f"Gemini bağlantı hatası: {e}")
         return None
 
 def konu_ac(baslik, icerik, node_id):
-    """XenForo REST API'sini kullanarak forumda JSON formatında konuyu açar."""
+    """XenForo REST API'sine standart form verisi formatında güvenli istek atar."""
+    # Başlıkları XenForo'nun standart API anahtarı tanıma yapısına geri getiriyoruz
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "XF-Api-Key": XF_API_KEY,
-        "XF-Api-User": XF_API_USER_ID,
-        "Content-Type": "application/json",  # JSON kabul etmesi için zorunlu başlık
-        "Accept": "application/json"
+        "XF-Api-Key": str(XF_API_KEY).strip(),
+        "XF-Api-User": str(XF_API_USER_ID).strip()
     }
     
-    # Sunucu kaprislerini engellemek için string ve int tiplerini kesinleştiriyoruz
-    data = {
+    # Parametreleri form verisi olarak gönderiyoruz
+    payload = {
         "node_id": int(node_id),
         "title": str(baslik).strip(),
         "message": str(icerik).strip()
     }
+    
     try:
-        # json=data kullanarak içeriği ham form verisi yerine JSON paketi olarak atıyoruz
-        response = requests.post(XF_API_URL, headers=headers, json=data, timeout=25)
+        # API anahtarının kaybolmaması için data=payload yapısını kullanıyoruz
+        response = requests.post(XF_API_URL, headers=headers, data=payload, timeout=25)
         
         if response.status_code == 200:
             print(f"Başarılı şekilde eklendi: {baslik}")
             return True
         else:
-            print(f"XenForo API Hatası ({response.status_code}) - Mesaj Formatı veya Yetki Sorunu!")
+            print(f"XenForo API Hatası ({response.status_code})")
             print(f"Sunucu Yanıtı: {response.text}")
             return False
     except Exception as e:
@@ -181,7 +179,6 @@ def ana_fonksiyon():
         haber_linki = haber["link"]
         detay_metni = haber["detay"]
         
-        # Mükerrer konu açmamak için hafıza kontrolü
         if baslik in hafiza:
             continue
             
@@ -190,24 +187,21 @@ def ana_fonksiyon():
         print("Gemini içerik üretiyor...")
         yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
         
-        # KONTROL: Gemini o anlık yoğunluktan (503) dolayı boş döndüyse işlemi iptal et
         if not yapay_zeka_icerigi:
-            print("Gemini içerik üretemedi (API Yoğun veya Hatalı). Forumda boş konu açılmaması için bu tur pas geçiliyor...")
+            print("Gemini içerik üretemedi (API Yoğun veya Hatalı). Bu tur pas geçiliyor...")
             return  
         
-        # Orijinal görseli bulup BBCode formatında metnin en üstüne ekleme
         canli_gorsel_url = gorsel_bul(haber_linki)
         if canli_gorsel_url:
             yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
         
         time.sleep(3)
         
-        # XenForo'da konuyu açmayı dene. JSON uyumlu yeni sisteme göre çalışır.
+        # Yenilenen form-data yapısıyla konuyu açmayı deniyoruz
         if not konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
             print("Konu açılamadı, süreç durduruldu.")
             return  
             
-        # İşlem başarılıysa hafızaya yaz ve bu çalıştırma için döngüden çık (Her çalıştırmada 1 konu)
         hafiza_yaz(baslik)
         break 
 
