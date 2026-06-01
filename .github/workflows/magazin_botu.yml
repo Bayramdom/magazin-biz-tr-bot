@@ -39,7 +39,7 @@ jobs:
         env:
           XF_API_KEY: ${{ secrets.XF_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          XF_API_USER_ID: "1" # Eğer python kodunda os.environ kullanırsan diye garantiye aldık
+          XF_API_USER_ID: 6746 # Eğer python kodunda os.environ kullanırsan diye garantiye aldık
         run: python magazin_botu.py
 
       - name: Hafızayı Güncelle ve Güvenle Kaydet
