@@ -56,7 +56,6 @@ def onedio_rss_cek():
             kategoriler_metni = " ".join([cat.get_text().lower() for cat in category_tags])
             baslik_metni = title_tag.get_text().lower() if title_tag else ""
             
-            # Kategoride veya başlıkta magazin kelimeleri geçiyor mu kontrolü
             is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
             
             if is_magazin:
@@ -98,7 +97,7 @@ def gorsel_bul(haber_url):
     return gorsel
 
 def gemini_magazin_yaz(baslik, kaynak_detay):
-    """Gemini 2.5-Flash API'sini kullanarak haberi özgün forum konusuna dönüştürür."""
+    """Gemini API'sini kullanır. 429 (Kota) hatası alırsa otomatik olarak bekleyip tekrar dener."""
     if not GEMINI_API_KEY:
         print("Hata: GEMINI_API_KEY bulunamadı!")
         return None
@@ -122,17 +121,28 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     
     data = {"contents": [{"parts": [{"text": prompt}]}]}
     
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=20)
-        if response.status_code == 200:
-            res_json = response.json()
-            return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-        else:
-            print(f"Gemini API Hatası! Kod: {response.status_code}")
-            return None
-    except Exception as e:
-        print(f"Gemini bağlantı hatası: {e}")
-        return None
+    # 3 kere üst üste akıllı deneme döngüsü
+    for deneme in range(1, 4):
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=20)
+            
+            if response.status_code == 200:
+                res_json = response.json()
+                return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                
+            elif response.status_code == 429:
+                bekleme_suresi = deneme * 20  # İlk hatada 20, ikincide 40 saniye bekler
+                print(f"Gemini Kotası Dolmuş (429). {bekleme_suresi} saniye sonra otomatik tekrar denenecek (Deneme {deneme}/3)...")
+                time.sleep(bekleme_suresi)
+            else:
+                print(f"Gemini API Hatası! Kod: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"Gemini bağlantı hatası: {e}")
+            time.sleep(5)
+            
+    print("3 deneme sonrasında da Gemini kotası açılmadı. Bu tur pas geçiliyor.")
+    return None
 
 def konu_ac(baslik, icerik, node_id):
     """XenForo REST API'sine standart form verisi formatında güvenli istek atar."""
@@ -186,7 +196,7 @@ def ana_fonksiyon():
         yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
         
         if not yapay_zeka_icerigi:
-            print("Gemini içerik üretemedi (API Yoğun veya Hatalı). Bu tur pas geçiliyor...")
+            print("Gemini tüm denemelere rağmen içerik üretemedi. Forumda boş konu açılmaması için bu tur pas geçiliyor...")
             return  
         
         canli_gorsel_url = gorsel_bul(haber_linki)
