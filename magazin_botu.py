@@ -107,4 +107,63 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     except Exception as e:
         print(f"Gemini bağlantı hatası: {e}")
         
-    return f"{baslik} dünyasından en sıcak ve en yeni
+    return f"{baslik} dünyasından en sıcak ve en yeni dedikodular geldikçe paylaşmaya devam edeceğiz. Takipte kalın!"
+
+def konu_ac(baslik, icerik, node_id):
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "XF-Api-Key": XF_API_KEY
+    }
+    data = {
+        "node_id": node_id,
+        "title": baslik,
+        "message": icerik
+    }
+    try:
+        response = requests.post(XF_API_URL, headers=headers, data=data, timeout=25)
+        if response.status_code == 200:
+            print(f"Başarılı şekilde eklendi: {baslik}")
+            return True
+        else:
+            print(f"XenForo API Hatası ({response.status_code}) - {response.text}")
+            return False
+    except Exception as e:
+        print(f"XenForo baglanti hatasi: {e}")
+        return False
+
+def ana_fonksiyon():
+    print("Onedio Magazin haberleri taranıyor...")
+    magazin_haberleri = onedio_magazin_cek()
+    
+    if not magazin_haberleri:
+        print("Yeni haber bulunamadı veya siteye erişilemedi.")
+        return
+
+    hafiza = hafiza_oku()
+    
+    for haber in magazin_haberleri:
+        baslik = haber["baslik"]
+        haber_linki = haber["link"]
+        
+        if baslik in hafiza:
+            continue
+            
+        print(f"Yeni magazin haberi işleniyor: {baslik}")
+        
+        print("Gemini kota koruması için kısa bir mola...")
+        time.sleep(5)
+        
+        canli_gorsel_url, haber_detay_metni = haber_detayini_ve_resmini_bul(haber_linki)
+        
+        yapay_zeka_icerigi = gemini_magazin_yaz(baslik, haber_detay_metni)
+        
+        if canli_gorsel_url:
+            yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
+        
+        if konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
+            hafiza_yaz(baslik)
+            break 
+
+if __name__ == "__main__":
+    ana_fonksiyon()
