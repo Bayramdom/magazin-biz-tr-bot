@@ -7,11 +7,9 @@ import re
 # =====================================================================
 # CONFIGURATION / AYARLAR
 # =====================================================================
-# GitHub Secrets'tan güvenli şekilde çekiyoruz:
 XF_API_KEY = os.environ.get("XF_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# Hedef Forum Ayarları
 XF_API_URL = "https://www.magazin.biz.tr/api/threads"
 NODE_ID = 26  # magazin-haberleri.26 kategorisi için ID
 HAFIZA_DOSYASI = "used_titles.txt"
@@ -27,55 +25,63 @@ def hafiza_yaz(baslik):
     with open(HAFIZA_DOSYASI, "a", encoding="utf-8") as f:
         f.write(baslik + "\n")
 
-def onedio_magazin_cek():
-    url = "https://onedio.com/magazin"
+def onedio_rss_cek():
+    # Onedio'nun bot engeline takılmayan resmi RSS beslemesi
+    url = "https://onedio.com/support/rss.xml"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     haberler = []
     
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             return haberler
             
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.text, "xml")
+        items = soup.find_all("item")
         
-        for article in soup.find_all("article"):
-            link_tag = article.find("a", href=True)
-            title_tag = article.find(["h2", "h3", "span"], class_=re.compile(r"title|headline", re.I))
+        for item in items:
+            # Sadece magazin kategorisindeki haberleri filtrele
+            category_tags = item.find_all("category")
+            is_magazin = False
+            for cat in category_tags:
+                if "magazin" in cat.get_text().lower():
+                    is_magazin = True
+                    break
             
-            if link_tag and (title_tag or link_tag.get_text()):
-                baslik = title_tag.get_text().strip() if title_tag else link_tag.get_text().strip()
-                href = link_tag["href"]
+            if is_magazin:
+                title_tag = item.find("title")
+                link_tag = item.find("link")
+                desc_tag = item.find("description")
                 
-                full_url = href if href.startswith("http") else f"https://onedio.com{href}"
-                
-                if baslik and full_url not in [h['link'] for h in haberler]:
-                    haberler.append({"baslik": baslik, "link": full_url})
+                if title_tag and link_tag:
+                    baslik = title_tag.get_text().strip()
+                    link = link_tag.get_text().strip()
+                    desc = desc_tag.get_text().strip() if desc_tag else ""
+                    
+                    # HTML temizliği
+                    desc = BeautifulSoup(desc, "html.parser").get_text().strip()
+                    
+                    haberler.append({
+                        "baslik": baslik,
+                        "link": link,
+                        "detay": desc
+                    })
     except Exception as e:
-        print(f"Onedio çekme hatası: {e}")
+        print(f"RSS Çekme Hatası: {e}")
     
     return haberler
 
-def haber_detayini_ve_resmini_bul(haber_url):
+def gorsel_bul(haber_url):
     gorsel = None
-    detay_metni = ""
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        # Sunucuyu yormamak için detay sayfasına gitmeden önce kısa mola
-        time.sleep(5)
         sayfa_icerigi = requests.get(haber_url, headers=headers, timeout=10).text
-        
         bulunan_gorseller = re.findall(r'<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']', sayfa_icerigi)
         if bulunan_gorseller:
             gorsel = bulunan_gorseller[0]
-            
-        bulunan_ozet = re.findall(r'<meta[^>]*property=["\']og:description["\'][^>]*content=["\']([^"\']+)["\']', sayfa_icerigi)
-        if bulunan_ozet:
-            detay_metni = bulunan_ozet[0].strip()
-            
-    except Exception as e:
-        print(f"Siteden detay veri çekme hatası: {e}")
-    return gorsel, detay_metni
+    except:
+        pass
+    return gorsel
 
 def gemini_magazin_yaz(baslik, kaynak_detay):
     if not GEMINI_API_KEY:
@@ -84,13 +90,12 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     
-    haber_kaynagi = f"Haber Başlığı: {baslik}\nHaber Detayı/Özeti: {kaynak_detay}" if kaynak_detay else f"Haber Başlığı: {baslik}"
-    
     prompt = f"""
     Sen popüler bir magazin sitesinin baş editörüsün. Sana verilen magazin haberini okuyarak; ilgi çekici, akıcı, merak uyandıran ve tamamen özgün (copy-paste olmayan) bir Türkçe magazin forumu konusu yaz.
     
     KAYNAK BİLGİLER:
-    {haber_kaynagi}
+    Haber Başlığı: {baslik}
+    Haber Özeti: {kaynak_detay}
     
     KURALLAR:
     1. İçeriği zenginleştirerek en az 2-3 paragraf uzunluğunda okuması keyifli bir metin hazırla.
@@ -135,11 +140,11 @@ def konu_ac(baslik, icerik, node_id):
         return False
 
 def ana_fonksiyon():
-    print("Onedio Magazin haberleri taranıyor...")
-    magazin_haberleri = onedio_magazin_cek()
+    print("Onedio Resmi RSS kanalı taranıyor...")
+    magazin_haberleri = onedio_rss_cek()
     
     if not magazin_haberleri:
-        print("Yeni haber bulunamadı veya siteye erişilemedi.")
+        print("Güncel magazin haberi bulunamadı veya RSS'e erişilemedi.")
         return
 
     hafiza = hafiza_oku()
@@ -147,31 +152,28 @@ def ana_fonksiyon():
     for haber in magazin_haberleri:
         baslik = haber["baslik"]
         haber_linki = haber["link"]
+        detay_metni = haber["detay"]
         
         if baslik in hafiza:
             continue
             
         print(f"Yeni magazin haberi işleniyor: {baslik}")
         
-        # Sunucu güvenliği (Firewall) koruması için 15 saniyelik derin mola
-        print("Sunucu güvenliği koruması için bekletiliyor...")
-        time.sleep(15)
-        
-        canli_gorsel_url, haber_detay_metni = haber_detayini_ve_resmini_bul(haber_linki)
-        
         print("Gemini içerik üretiyor...")
-        yapay_zeka_icerigi = gemini_magazin_yaz(baslik, haber_detay_metni)
+        yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
         
+        # Sadece tek bir görsel için hızlı kontrol
+        canli_gorsel_url = gorsel_bul(haber_linki)
         if canli_gorsel_url:
             yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
         
-        # Konuyu açmadan önce son bir kez daha insansı bekleme süresi
-        time.sleep(10)
+        # Sunucunun dinlenmesi için konuyu açmadan önce 5 saniye mola
+        time.sleep(5)
         
         if konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
             hafiza_yaz(baslik)
-            print("Sunucu sağlığı için bu turluk işlem tamamlandı, bot kapatılıyor.")
-            break # Tek seferde sadece 1 konu açıp çıkacak, sunucu asla yorulmayacak.
+            print("İşlem başarıyla tamamlandı. Sunucu sağlığı için bot kapatılıyor.")
+            break # Tek seferde sadece 1 adet bomba konu açar ve durur.
 
 if __name__ == "__main__":
     ana_fonksiyon()
