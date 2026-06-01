@@ -55,8 +55,8 @@ def onedio_rss_cek():
             kategoriler_metni = " ".join([cat.get_text().lower() for cat in category_tags])
             baslik_metni = title_tag.get_text().lower() if title_tag else ""
             
-            # Kategoride veya başlıkta magazin kelimeleri geçiyor mu kontrolü
-            is_magazin = any(kelime in kategoriler_metni or elime in baslik_metni for kelime in magazin_kelimeleri)
+            # DÜZELTİLDİ: 'elime' hatası 'kelime' olarak düzeltildi
+            is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
             
             if is_magazin:
                 link_tag = item.find("link")
@@ -115,7 +115,7 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
     KURALLAR:
     1. İçeriği zenginleştirerek en az 2-3 paragraf uzunluğunda okuması keyifli bir metin hazırla.
     2. Forum diline uygun, okuyucuya hitap eden ama seviyeli bir üslup kullan.
-    3. Metnin sonuna "Siz bu konuda ne düşünüyorsunuz? Yorumlarda buluşalım!" gibi forumda etkileşim artıracak bir cümle ekle.
+    3. Metnin sonuna "Siz bu konuda ne düşün悠orsunuz? Yorumlarda buluşalım!" gibi forumda etkileşim artıracak bir cümle ekle.
     4. Asla markdown kod bloku (```) veya HTML tagları ekleme. Resmi BBCode formatını bozma.
     """
     
@@ -135,14 +135,12 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
 
 def konu_ac(baslik, icerik, node_id):
     """XenForo REST API'sine standart form verisi formatında güvenli istek atar."""
-    # Başlıkları XenForo'nun standart API anahtarı tanıma yapısına geri getiriyoruz
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "XF-Api-Key": str(XF_API_KEY).strip(),
         "XF-Api-User": str(XF_API_USER_ID).strip()
     }
     
-    # Parametreleri form verisi olarak gönderiyoruz
     payload = {
         "node_id": int(node_id),
         "title": str(baslik).strip(),
@@ -150,7 +148,6 @@ def konu_ac(baslik, icerik, node_id):
     }
     
     try:
-        # API anahtarının kaybolmaması için data=payload yapısını kullanıyoruz
         response = requests.post(XF_API_URL, headers=headers, data=payload, timeout=25)
         
         if response.status_code == 200:
@@ -197,7 +194,6 @@ def ana_fonksiyon():
         
         time.sleep(3)
         
-        # Yenilenen form-data yapısıyla konuyu açmayı deniyoruz
         if not konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
             print("Konu açılamadı, süreç durduruldu.")
             return  
