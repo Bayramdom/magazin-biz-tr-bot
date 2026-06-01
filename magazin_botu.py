@@ -101,104 +101,10 @@ def gorsel_bul(haber_url):
 def gemini_magazin_yaz(baslik, kaynak_detay):
     """Gemini 2.5-Flash API'sini kullanarak haberi özgün forum konusuna dönüştürür."""
     if not GEMINI_API_KEY:
-        return f"{baslik} hakkındaki magazin gelişmeleri yakından takip ediliyor."
+        print("Hata: GEMINI_API_KEY bulunamadı!")
+        return None
         
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     
-    prompt = f"""
-    Sen popüler bir magazin sitesinin baş editörüsün. Sana verilen magazin haberini okuyarak; ilgi çekici, akıcı, merak uyandıran ve tamamen özgün (copy-paste olmayan) bir Türkçe magazin forumu konusu yaz.
-    
-    KAYNAK BİLGİLER:
-    Haber Başlığı: {baslik}
-    Haber Özeti: {kaynak_detay}
-    
-    KURALLAR:
-    1. İçeriği zenginleştirerek en az 2-3 paragraf uzunluğunda okuması keyifli bir metin hazırla.
-    2. Forum diline uygun, okuyucuya hitap eden ama seviyeli bir üslup kullan.
-    3. Metnin sonuna "Siz bu konuda ne düşünüyorsunuz? Yorumlarda buluşalım!" gibi forumda etkileşim artıracak bir cümle ekle.
-    4. Asla markdown kod bloku (```) veya HTML tagları ekleme. Resmi BBCode formatını bozma.
-    """
-    
-    data = {"contents": [{"parts": [{"text": prompt}]}]}
-    
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=20)
-        if response.status_code == 200:
-            res_json = response.json()
-            return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-        else:
-            print(f"Gemini API Hatası! Kod: {response.status_code}, Cevap: {response.text}")
-    except Exception as e:
-        print(f"Gemini bağlantı hatası: {e}")
-        
-    return f"{baslik} dünyasından en sıcak ve en yeni dedikodular geldikçe paylaşmaya devam edeceğiz. Takipte kalın!"
-
-def konu_ac(baslik, icerik, node_id):
-    """XenForo REST API'sini kullanarak forumda konuyu açar."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "XF-Api-Key": XF_API_KEY,
-        "XF-Api-User": XF_API_USER_ID  # Super User anahtar için zorunlu olan kullanıcı ID'si
-    }
-    data = {
-        "node_id": int(node_id),
-        "title": baslik.strip(),
-        "message": icerik
-    }
-    try:
-        response = requests.post(XF_API_URL, headers=headers, data=data, timeout=25)
-        
-        if response.status_code == 200:
-            print(f"Başarılı şekilde eklendi: {baslik}")
-            return True
-        else:
-            print(f"XenForo API Hatası ({response.status_code}) - Sunucu Güvenlik Duvarına veya API Engeline Takıldı!")
-            print(f"Sunucu Yanıtı: {response.text}")
-            return False
-    except Exception as e:
-        print(f"XenForo bağlantı hatası: {e}")
-        return False
-
-def ana_fonksiyon():
-    print("Onedio Resmi RSS kanalı taranıyor...")
-    magazin_haberleri = onedio_rss_cek()
-    
-    if not magazin_haberleri:
-        print("Güncel magazin haberi bulunamadı veya RSS'e erişilemedi.")
-        return
-
-    hafiza = hafiza_oku()
-    
-    for haber in magazin_haberleri:
-        baslik = haber["baslik"].strip()
-        haber_linki = haber["link"]
-        detay_metni = haber["detay"]
-        
-        # Mükerrer konu açmamak için hafıza kontrolü
-        if baslik in hafiza:
-            continue
-            
-        print(f"Yeni magazin haberi işleniyor: {baslik}")
-        
-        print("Gemini içerik üretiyor...")
-        yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
-        
-        # Orijinal görseli bulup BBCode formatında metnin en üstüne ekleme
-        canli_gorsel_url = gorsel_bul(haber_linki)
-        if canli_gorsel_url:
-            yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
-        
-        time.sleep(3)
-        
-        # XenForo'da konuyu açmayı dene. Başarısız olursa (WAF/Kalkan engeli vb.) döngüyü kırar.
-        if not konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
-            print("Kalkan engeli aşılamadı, Akın'ın whitelist ayarını yapması bekleniyor...")
-            return  
-            
-        # İşlem başarılıysa hafızaya yaz ve bu çalıştırma için döngüden çık (Her çalıştırmada 1 konu)
-        hafiza_yaz(baslik)
-        break 
-
-if __name__ == "__main__":
-    ana_fonksiyon()
+    prompt
