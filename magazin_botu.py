@@ -7,7 +7,7 @@ import re
 # =====================================================================
 # CONFIGURATION / AYARLAR
 # =====================================================================
-# GitHub Secrets'tan güvenli şekilde çekiyoruz, burası boş kalacak:
+# GitHub Secrets'tan güvenli şekilde çekiyoruz:
 XF_API_KEY = os.environ.get("XF_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
@@ -61,6 +61,8 @@ def haber_detayini_ve_resmini_bul(haber_url):
     detay_metni = ""
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        # Sunucuyu yormamak için detay sayfasına gitmeden önce kısa mola
+        time.sleep(5)
         sayfa_icerigi = requests.get(haber_url, headers=headers, timeout=10).text
         
         bulunan_gorseller = re.findall(r'<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']', sayfa_icerigi)
@@ -111,7 +113,7 @@ def gemini_magazin_yaz(baslik, kaynak_detay):
 
 def konu_ac(baslik, icerik, node_id):
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
         "XF-Api-Key": XF_API_KEY
     }
@@ -151,19 +153,25 @@ def ana_fonksiyon():
             
         print(f"Yeni magazin haberi işleniyor: {baslik}")
         
-        print("Gemini kota koruması için kısa bir mola...")
-        time.sleep(5)
+        # Sunucu güvenliği (Firewall) koruması için 15 saniyelik derin mola
+        print("Sunucu güvenliği koruması için bekletiliyor...")
+        time.sleep(15)
         
         canli_gorsel_url, haber_detay_metni = haber_detayini_ve_resmini_bul(haber_linki)
         
+        print("Gemini içerik üretiyor...")
         yapay_zeka_icerigi = gemini_magazin_yaz(baslik, haber_detay_metni)
         
         if canli_gorsel_url:
             yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
         
+        # Konuyu açmadan önce son bir kez daha insansı bekleme süresi
+        time.sleep(10)
+        
         if konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
             hafiza_yaz(baslik)
-            break 
+            print("Sunucu sağlığı için bu turluk işlem tamamlandı, bot kapatılıyor.")
+            break # Tek seferde sadece 1 konu açıp çıkacak, sunucu asla yorulmayacak.
 
 if __name__ == "__main__":
     ana_fonksiyon()
