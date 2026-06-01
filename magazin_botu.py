@@ -7,13 +7,11 @@ import re
 # =====================================================================
 # CONFIGURATION / AYARLAR
 # =====================================================================
-# GitHub Secrets'tan güvenli şekilde çekiyoruz:
 XF_API_KEY = os.environ.get("XF_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# Hedef Forum Ayarları
 XF_API_URL = "https://www.magazin.biz.tr/api/threads"
-NODE_ID = 26  # magazin-haberleri.26 kategorisi için ID
+NODE_ID = 26  
 HAFIZA_DOSYASI = "used_titles.txt"
 # =====================================================================
 
@@ -32,7 +30,6 @@ def onedio_rss_cek():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     haberler = []
     
-    # Magazin dünyasıyla ilgili olabilecek geniş anahtar kelime ağı
     magazin_kelimeleri = ["magazin", "ünlü", "unlu", "oyuncu", "dizi", "fenomen", "şarkıcı", "sarkici", "dedikodu", "televizyon", "sosyal medya"]
     
     try:
@@ -48,11 +45,9 @@ def onedio_rss_cek():
             title_tag = item.find("title")
             desc_tag = item.find("description")
             
-            # Kategorileri tek bir metin haline getiriyoruz
             kategoriler_metni = " ".join([cat.get_text().lower() for cat in category_tags])
             baslik_metni = title_tag.get_text().lower() if title_tag else ""
             
-            # Hem kategoride hem de başlıkta magazin kelimelerini ara
             is_magazin = any(kelime in kategoriler_metni or kelime in baslik_metni for kelime in magazin_kelimeleri)
             
             if is_magazin:
@@ -62,7 +57,6 @@ def onedio_rss_cek():
                     link = link_tag.get_text().strip()
                     desc = desc_tag.get_text().strip() if desc_tag else ""
                     
-                    # Açıklama kısmındaki HTML taglarını temizle
                     desc = BeautifulSoup(desc, "html.parser").get_text().strip()
                     
                     if baslik not in [h['baslik'] for h in haberler]:
@@ -138,7 +132,7 @@ def konu_ac(baslik, icerik, node_id):
             print(f"Başarılı şekilde eklendi: {baslik}")
             return True
         else:
-            print(f"XenForo API Hatası ({response.status_code}) - {response.text}")
+            print(f"XenForo API Hatası ({response.status_code}) - Sunucu Güvenlik Duvarına Takıldı!")
             return False
     except Exception as e:
         print(f"XenForo baglanti hatasi: {e}")
@@ -167,18 +161,19 @@ def ana_fonksiyon():
         print("Gemini içerik üretiyor...")
         yapay_zeka_icerigi = gemini_magazin_yaz(baslik, detay_metni)
         
-        # Görseli hızlıca çek
         canli_gorsel_url = gorsel_bul(haber_linki)
         if canli_gorsel_url:
             yapay_zeka_icerigi = f"[IMG]{canli_gorsel_url}[/IMG]\n\n{yapay_zeka_icerigi}"
         
-        # Sunucunun dinlenmesi için konuyu açmadan önce 5 saniye mola
-        time.sleep(5)
+        time.sleep(3)
         
-        if konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
-            hafiza_yaz(baslik)
-            print("İşlem başarıyla tamamlandı. Sunucu sağlığı için bot kapatılıyor.")
-            break # Tek seferde sadece 1 adet bomba konu açar ve durur.
+        # Eğer sunucu doğrulamaya takılırsa döngüyü tamamen kır, şişme yapmasın
+        if not konu_ac(baslik, yapay_zeka_icerigi, NODE_ID):
+            print("Kalkan engeli aşılamadı, Akın'ın whitelist ayarını yapması bekleniyor...")
+            return  
+            
+        hafiza_yaz(baslik)
+        break 
 
 if __name__ == "__main__":
     ana_fonksiyon()
