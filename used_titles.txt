@@ -2207,3 +2207,4 @@ Meteoroloji'den Sel, Dolu ve Sağanak Uyarısı! Türkiye Genelinde Sıcaklıkla
 Birinci Tıp Değil: Kazancın En Yüksek Olduğu Üniversite Bölümleri Belli Oldu
 Yaprak Dökümü'nün Hayriye'si Güven Hokna'dan Survivor Yarışmacısı Seren Ay Çetin'e Olay Yorum!
 En Yüksek Kazanç
+Sıcaklık Düşüyor
